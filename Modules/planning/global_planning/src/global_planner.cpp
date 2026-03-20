@@ -12,10 +12,16 @@ void Global_Planner::init(ros::NodeHandle& nh)
     // 2D规划时,定高高度
     nh.param("global_planner/fly_height_2D", fly_height_2D, 1.0);  
     // 安全距离，若膨胀距离设置已考虑安全距离，建议此处设为0
-    nh.param("global_planner/safe_distance", safe_distance, 0.05); 
+    nh.param("global_planner/safe_distance", safe_distance, 0.05);
+    // 规划算法选择：0=A*, 1=RRT
+    nh.param("global_planner/algorithm_mode", algorithm_mode, 0); 
     nh.param("global_planner/time_per_path", time_per_path, 1.0); 
     // 重规划频率 
     nh.param("global_planner/replan_time", replan_time, 2.0); 
+    // 抵达判定阈值（用于统计飞行时间/距离）
+    nh.param("global_planner/arrive_dist", arrive_dist, 0.3);
+    nh.param("global_planner/arrive_vel", arrive_vel, 0.2);
+    nh.param("global_planner/metrics_min_step", metrics_min_step, 0.01);
     // 选择地图更新方式：　0代表全局点云，１代表局部点云，２代表激光雷达scan数据
     nh.param("global_planner/map_input", map_input, 0); 
     // 是否为仿真模式
@@ -47,22 +53,28 @@ void Global_Planner::init(ros::NodeHandle& nh)
     message_pub = nh.advertise<prometheus_msgs::Message>("/prometheus/message/global_planner", 10);
     // 发布路径用于显示
     path_cmd_pub   = nh.advertise<nav_msgs::Path>("/prometheus/global_planning/path_cmd",  10); 
+    // 发布飞行统计
+    metrics_pub = nh.advertise<std_msgs::Float64MultiArray>("/prometheus/global_planning/flight_metrics", 10);
     // 定时器 安全检测
     // safety_timer = nh.createTimer(ros::Duration(2.0), &Global_Planner::safety_cb, this); 
     // 定时器 规划器算法执行周期
     mainloop_timer = nh.createTimer(ros::Duration(1.5), &Global_Planner::mainloop_cb, this);        
     // 路径追踪循环，快速移动场景应当适当提高执行频率
     // time_per_path
-    track_path_timer = nh.createTimer(ros::Duration(time_per_path), &Global_Planner::track_path_cb, this);        
-
-
-
-    // Astar algorithm
-    Astar_ptr.reset(new Astar);
-    Astar_ptr->init(nh);
-    pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "A_star init.");
-
-
+    track_path_timer = nh.createTimer(ros::Duration(time_per_path), &Global_Planner::track_path_cb, this);
+    // Planner algorithm
+    if (algorithm_mode == 0)
+    {
+        Astar_ptr.reset(new Astar);
+        Astar_ptr->init(nh);
+        pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "A_star init.");
+    }
+    else
+    {
+        RRT_ptr.reset(new RRT);
+        RRT_ptr->init(nh);
+        pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "RRT init.");
+    }
     // 规划器状态参数初始化
     exec_state = EXEC_STATE::WAIT_GOAL;
     odom_ready = false;
@@ -71,6 +83,12 @@ void Global_Planner::init(ros::NodeHandle& nh)
     sensor_ready = false;
     is_safety = true;
     is_new_path = false;
+
+    // metrics init
+    metrics_running = false;
+    metrics_last_pos_valid = false;
+    final_goal_cmd_sent = false;
+    metrics_distance_m = 0.0;
 
     // 初始化发布的指令
     Command_Now.header.stamp = ros::Time::now();
@@ -145,6 +163,13 @@ void Global_Planner::goal_cb(const geometry_msgs::PoseStampedConstPtr& msg)
 
     goal_ready = true;
 
+    // 新目标点：启动一次任务统计（从收到goal开始），重规划不清零
+    metrics_running = true;
+    metrics_last_pos_valid = false;
+    final_goal_cmd_sent = false;
+    metrics_distance_m = 0.0;
+    // 用接收goal的时刻作为起点（若use_sim_time则为仿真时钟）
+    metrics_start_time = ros::Time::now();
     // 获得新目标点
     pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME,"Get a new goal point");
 
@@ -180,6 +205,26 @@ void Global_Planner::drone_state_cb(const prometheus_msgs::DroneStateConstPtr& m
     }
 
     start_acc << 0.0, 0.0, 0.0;
+
+    // 统计实际飞行距离：从收到goal开始累计，期间不因重规划/状态切换中断（仅在LANDING时停）
+    if (metrics_running && exec_state != EXEC_STATE::LANDING)
+    {
+        Eigen::Vector3d cur_pos(start_pos[0], start_pos[1], start_pos[2]);
+        if (!metrics_last_pos_valid)
+        {
+            metrics_last_pos = cur_pos;
+            metrics_last_pos_valid = true;
+        }
+        else
+        {
+            const double step = (cur_pos - metrics_last_pos).norm();
+            if (step >= metrics_min_step)
+            {
+                metrics_distance_m += step;
+                metrics_last_pos = cur_pos;
+            }
+        }
+    }
 
     odom_ready = true;
 
@@ -219,9 +264,9 @@ void Global_Planner::Gpointcloud_cb(const sensor_msgs::PointCloud2ConstPtr &msg)
     if(!map_groundtruth)
     {
         // 对Astar中的地图进行更新
-        Astar_ptr->Occupy_map_ptr->map_update_gpcl(msg);
+        (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->map_update_gpcl(msg);
         // 并对地图进行膨胀
-        Astar_ptr->Occupy_map_ptr->inflate_point_cloud(); 
+        (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->inflate_point_cloud(); 
     }else
     {
         static int update_num=0;
@@ -231,9 +276,9 @@ void Global_Planner::Gpointcloud_cb(const sensor_msgs::PointCloud2ConstPtr &msg)
         if(update_num == 10)
         {
             // 对Astar中的地图进行更新
-            Astar_ptr->Occupy_map_ptr->map_update_gpcl(msg);
+            (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->map_update_gpcl(msg);
             // 并对地图进行膨胀
-            Astar_ptr->Occupy_map_ptr->inflate_point_cloud(); 
+            (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->inflate_point_cloud(); 
             update_num = 0;
         } 
     }
@@ -253,9 +298,9 @@ void Global_Planner::Lpointcloud_cb(const sensor_msgs::PointCloud2ConstPtr &msg)
     sensor_ready = true;
 
     // 对Astar中的地图进行更新（局部地图+odom）
-    Astar_ptr->Occupy_map_ptr->map_update_lpcl(msg, Drone_odom);
+    (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->map_update_lpcl(msg, Drone_odom);
     // 并对地图进行膨胀
-    Astar_ptr->Occupy_map_ptr->inflate_point_cloud(); 
+    (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->inflate_point_cloud(); 
 }
 
 // 根据2维雷达数据更新地图
@@ -271,9 +316,9 @@ void Global_Planner::laser_cb(const sensor_msgs::LaserScanConstPtr &msg)
     sensor_ready = true;
 
     // 对Astar中的地图进行更新（laser+odom）
-    Astar_ptr->Occupy_map_ptr->map_update_laser(msg, Drone_odom);
+    (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->map_update_laser(msg, Drone_odom);
     // 并对地图进行膨胀
-    Astar_ptr->Occupy_map_ptr->inflate_point_cloud(); 
+    (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->inflate_point_cloud(); 
 }
 
 void Global_Planner::track_path_cb(const ros::TimerEvent& e)
@@ -319,12 +364,12 @@ void Global_Planner::track_path_cb(const ros::TimerEvent& e)
         Command_Now.Reference_State.yaw_ref             = desired_yaw;
         command_pub.publish(Command_Now);
 
-        pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "Reach the goal!");
-        
-        // 停止执行
-        path_ok = false;
-        // 转换状态为等待目标
-        exec_state = EXEC_STATE::WAIT_GOAL;
+        // 仅表示“已发送最终目标点”，真正抵达由 mainloop_cb 根据距离/速度判定
+        if (!final_goal_cmd_sent)
+        {
+            pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "Final goal command sent. Waiting for arrival...");
+            final_goal_cmd_sent = true;
+        }
         return;
     }
  
@@ -422,16 +467,17 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
         {
             
             // 重置规划器
-            Astar_ptr->reset();
+            if(algorithm_mode==0) Astar_ptr->reset(); else RRT_ptr->reset();
             // 使用规划器执行搜索，返回搜索结果
 
             int astar_state;
 
             // Astar algorithm
-            astar_state = Astar_ptr->search(start_pos, goal_pos);
+            if(algorithm_mode==0) astar_state = Astar_ptr->search(start_pos, goal_pos);
+            else astar_state = RRT_ptr->search(start_pos, goal_pos);
 
             // 未寻找到路径
-            if(astar_state==Astar::NO_PATH)
+            if(astar_state==(algorithm_mode==0?Astar::NO_PATH:RRT::NO_PATH))
             {
                 path_ok = false;
                 exec_state = EXEC_STATE::WAIT_GOAL;
@@ -441,11 +487,23 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
             {
                 path_ok = true;
                 is_new_path = true;
-                path_cmd = Astar_ptr->get_ros_path();
+                path_cmd = (algorithm_mode==0?Astar_ptr->get_ros_path():RRT_ptr->get_ros_path());
                 Num_total_wp = path_cmd.poses.size();
                 start_point_index = get_start_point_id();
                 cur_id = start_point_index;
                 tra_start_time = ros::Time::now();
+
+                // 开始统计：一次任务(一个goal)只初始化一次；重规划时不清零，确保累计完整飞行时间/距离
+                if (!metrics_running)
+                {
+                    metrics_running = true;
+                    metrics_distance_m = 0.0;
+                    metrics_start_time = ros::Time::now();
+                    metrics_last_pos_valid = false;   // 由 drone_state_cb 首次回调时用当前位置初始化
+                }
+                // 每次拿到新路径都需要重新发送最终目标点，因此这里只重置该标志
+                final_goal_cmd_sent = false;
+
                 exec_state = EXEC_STATE::TRACKING;
                 path_cmd_pub.publish(path_cmd);
                 pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "Get a new path!");       
@@ -455,6 +513,37 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
         }
         case TRACKING:
         {
+            // 若已发送最终目标点，则以距离+速度判定真正抵达（用于统计）
+            if (final_goal_cmd_sent && metrics_running)
+            {
+                Eigen::Vector3d cur_pos(_DroneState.position[0], _DroneState.position[1], _DroneState.position[2]);
+                Eigen::Vector3d cur_vel(_DroneState.velocity[0], _DroneState.velocity[1], _DroneState.velocity[2]);
+                const double d = (cur_pos - goal_pos).norm();
+                const double v = cur_vel.norm();
+
+                if (d <= arrive_dist && v <= arrive_vel)
+                {
+                    const ros::Time now_t = (_DroneState.header.stamp.isZero() ? ros::Time::now() : _DroneState.header.stamp);
+                    const double t = (now_t - metrics_start_time).toSec();
+                    std_msgs::Float64MultiArray m;
+                    m.data.resize(2);
+                    m.data[0] = t;
+                    m.data[1] = metrics_distance_m;
+                    metrics_pub.publish(m);
+
+                    std::ostringstream ss;
+                    ss << "Arrived. time=" << std::fixed << std::setprecision(2) << t
+                       << " s, distance=" << metrics_distance_m << " m";
+                    pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, ss.str());
+
+                    // 停止执行并回到等待目标
+                    metrics_running = false;
+                    path_ok = false;
+                    exec_state = EXEC_STATE::WAIT_GOAL;
+                    break;
+                }
+            }
+
             // 本循环是1Hz,此处不是很精准
             if(exec_num >= replan_time)
             {
@@ -492,7 +581,7 @@ void Global_Planner::safety_cb(const ros::TimerEvent& e)
 {
     Eigen::Vector3d cur_pos(_DroneState.position[0], _DroneState.position[1], _DroneState.position[2]);
     
-    is_safety = Astar_ptr->check_safety(cur_pos, safe_distance);
+    is_safety = (algorithm_mode==0?Astar_ptr->check_safety(cur_pos, safe_distance):RRT_ptr->check_safety(cur_pos, safe_distance));
 }
 
 int Global_Planner::get_start_point_id(void)

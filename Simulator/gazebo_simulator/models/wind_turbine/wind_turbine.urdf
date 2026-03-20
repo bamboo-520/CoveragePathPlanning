@@ -1,0 +1,151 @@
+<?xml version="1.0" ?>
+<robot name="wind_turbine">
+
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <sphere radius="0.001" />
+      </geometry>
+    </visual>
+  </link>
+
+  <link name="support_link">
+    <collision name="support_collision">
+      <origin xyz="0 0 0.715" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.1 0.123 1.43" />
+      </geometry>
+    </collision>
+    <visual>
+      <geometry>
+        <mesh filename="package://prometheus_gazebo/models/wind_turbine/meshes/Support.stl"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </visual>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="20"/>
+      <inertia ixx="3.43338" ixy="0" ixz="0" iyy="3.42482" iyz="0" izz="0.04188" />
+    </inertial>
+  </link>
+
+  <joint name="support2base" type="fixed">
+    <parent link="base_link" />
+    <child link="support_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="center_link">
+    <collision name="center_collision">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.0839 0.11 0.0844" />
+      </geometry>
+    </collision>
+    <visual name="center_visual1">
+      <geometry>
+        <mesh filename="package://prometheus_gazebo/models/wind_turbine/meshes/Center.stl"/>
+      </geometry>
+      <origin xyz="0 0.107 -1.3884" rpy="0 0 0" />
+    </visual>
+    <inertial>
+      <mass value="4"/>
+      <inertia ixx="0.00640" ixy="0" ixz="0" iyy="0.00472" iyz="0" izz="0.00638" />
+    </inertial>
+  </link>
+
+  <joint name="center2support" type="revolute">
+    <parent link="support_link" />
+    <child link="center_link"/>
+    <origin xyz="0 -0.107 1.3884" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1800" upper="1800" effort="10" velocity="0.009"/>
+  </joint>
+
+  <transmission name="center2support_trans">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="center2support">
+      <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="center2support_motor">
+      <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  <link name="blade1_link">
+    <collision name="blade1_collision">
+      <origin xyz="0.2933 0 -0.1695" rpy="0 -1.05 0"/>
+      <geometry>
+        <box size="0.0746 0.0374 0.678" />
+      </geometry>
+    </collision>
+    <visual name="blade1_visual1">
+      <geometry>
+        <mesh filename="package://prometheus_gazebo/models/wind_turbine/meshes/Blade1.stl"/>
+      </geometry>
+      <origin xyz="0 0.107 -1.3884" rpy="0 0 0" />
+    </visual>
+    <inertial>
+      <mass value="1.0"/>
+      <inertia ixx="0.03842" ixy="0" ixz="0" iyy="0.03877" iyz="0" izz="0.00058" />
+    </inertial>
+  </link>
+
+  <joint name="blade12center" type="fixed">
+    <parent link="center_link" />
+    <child link="blade1_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="blade2_link">
+    <collision name="blade2_collision">
+      <origin xyz="-0.2933 0 -0.1695" rpy="0 1.05 0"/>
+      <geometry>
+        <box size="0.0746 0.0374 0.678" />
+      </geometry>
+    </collision>
+    <visual name="blade2_visual1">
+      <geometry>
+        <mesh filename="package://prometheus_gazebo/models/wind_turbine/meshes/Blade2.stl"/>
+      </geometry>
+      <origin xyz="0 0.107 -1.3884" rpy="0 0 0" />
+    </visual>
+    <inertial>
+      <mass value="1.0"/>
+      <inertia ixx="0.03842" ixy="0" ixz="0" iyy="0.03877" iyz="0" izz="0.00058" />
+    </inertial>
+  </link>
+
+  <joint name="blade22center" type="fixed">
+    <parent link="center_link" />
+    <child link="blade2_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="blade3_link">
+    <collision name="blade3_collision">
+      <origin xyz="0 0 0.339" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.0746 0.0374 0.678" />
+      </geometry>
+    </collision>
+    <visual name="blade3_visual1">
+      <geometry>
+        <mesh filename="package://prometheus_gazebo/models/wind_turbine/meshes/Blade3.stl"/>
+      </geometry>
+      <origin xyz="0 0.107 -1.3884" rpy="0 0 0" />
+    </visual>
+    <inertial>
+      <mass value="1.0"/>
+      <inertia ixx="0.03842" ixy="0" ixz="0" iyy="0.03877" iyz="0" izz="0.00058" />
+    </inertial>
+  </link>
+
+  <joint name="blade32center" type="fixed">
+    <parent link="center_link" />
+    <child link="blade3_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

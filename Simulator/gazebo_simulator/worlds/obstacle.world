@@ -99,10 +99,10 @@
     </model>
 
     <model name='pillar_l_1'>
-      <!-- <include>
+      <include>
         <uri>model://pillar_l</uri>
 	      <pose> 0 0 1.75 0 0 0 </pose>
-      </include> -->
+      </include> 
     </model>
     <model name='pillar_m_1'>
       <include>
@@ -182,5 +182,59 @@
         <pose>-5 6 1.75 0 0 0</pose>
       </include>
     </model>
+
+    <!-- <model name="dynamic_obstacle_1">
+  <pose>-9 0 1.25 0 0 0</pose>
+  <static>false</static>
+
+  <link name="link">
+    <inertial>
+      <mass>20.0</mass>
+      <inertia>
+        <ixx>8.0</ixx>
+        <iyy>8.0</iyy>
+        <izz>2.0</izz>
+        <ixy>0.0</ixy>
+        <ixz>0.0</ixz>
+        <iyz>0.0</iyz>
+      </inertia>
+    </inertial>
+
+    <collision name="collision">
+      <geometry>
+        <cylinder>
+          <radius>0.35</radius>
+          <length>2.5</length>
+        </cylinder>
+      </geometry>
+    </collision>
+
+    <visual name="visual">
+      <geometry>
+        <cylinder>
+          <radius>0.35</radius>
+          <length>2.5</length>
+        </cylinder>
+      </geometry>
+      <material>
+        <ambient>1 0 0 1</ambient>
+        <diffuse>1 0 0 1</diffuse>
+      </material>
+    </visual>
+
+    <gravity>false</gravity>
+    <self_collide>false</self_collide>
+    <kinematic>true</kinematic>
+  </link>
+
+  <plugin name="move_obstacle_plugin" filename="libmove_obstacle_plugin.so">
+    <speed>0.2</speed>
+    <xmin>-9.0</xmin>
+    <xmax>-5.0</xmax>
+    <y_fixed>0.0</y_fixed>
+    <z_fixed>1.25</z_fixed>
+  </plugin>
+  </model> -->
+
   </world>
 </sdf>

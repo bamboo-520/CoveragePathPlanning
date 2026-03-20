@@ -1,4 +1,4 @@
-#cmake_minimum_required(VERSION 2.4.6)
+#cmake_minimum_required(VERSION 3.16)
 #include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 
 # Set the build type.  Options are:
@@ -33,7 +33,7 @@
 #target_link_libraries(odom_visualization pose_utils)
 
 #----------------------------------
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.16)
 project(odom_visualization)
 
 set(CMAKE_BUILD_TYPE "Release")

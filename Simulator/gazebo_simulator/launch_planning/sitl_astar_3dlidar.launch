@@ -1,9 +1,9 @@
 <launch>
     <!-- Launch Gazebo Simulation -->
-    <arg name="x" default="0.0"/>
+    <arg name="x" default="-10.0"/>
     <arg name="y" default="-10.0"/>
     <arg name="z" default="0"/>
-	<arg name="world" default="$(find prometheus_gazebo)/worlds/obstacle.world"/>
+	<arg name="world" default="$(find prometheus_gazebo)/worlds/wind_turbine_gazebo.world"/>
 	<arg name="sdf" default="$(find prometheus_gazebo)/amov_models/p450_3Dlidar/p450_3Dlidar.sdf"/>
 	<arg name="model" default="p450_3Dlidar"/>
     <include file="$(find prometheus_gazebo)/launch_basic/sitl.launch">
@@ -37,8 +37,8 @@
         <param name="global_planner/fly_height_2D" value="1.0" type="double"/>
         <!-- 停止距离 -->
         <param name="global_planner/safe_distance" value="0.01" type="double"/>
-        <param name="global_planner/time_per_path" value="1.0" type="double"/>
-        <param name="global_planner/replan_time" value="2.0" type="double"/>
+        <param name="global_planner/time_per_path" value="2.0" type="double"/>
+        <param name="global_planner/replan_time" value="0.2" type="double"/>
         <param name="global_planner/map_input" value="0" type="int"/>
         <param name="global_planner/sim_mode" value="true" type="bool"/>
         <!-- 最大搜索步数 -->
@@ -48,7 +48,7 @@
         <!-- 分辨率 -->
         <param name="map/resolution" value="0.1" type="double"/>
         <!-- 障碍物膨胀距离 -->
-        <param name="map/inflate" value="0.8" type="double"/>
+        <param name="map/inflate" value="0.5" type="double"/>
         <!-- 地图范围 -->
         <param name="map/origin_x" value="-15.0" type="double"/>
         <param name="map/origin_y" value="-15.0" type="double"/>

@@ -114,6 +114,22 @@ private:
     void mainloop_cb(const ros::TimerEvent& e);
     void control_cb(const ros::TimerEvent& e);
 
+    // -------------------------
+    // 统计：实际飞行路径长度 & 飞行时间（基于里程计/状态估计）
+    // 说明：APF/VFH 属于在线局部规划，不会一次性输出整条离散路径。
+    // 因此这里采用“从开始执行到到达目标”的实际轨迹积分方式。
+    // -------------------------
+    bool stats_need_reset;          // 收到新目标点后置位，等待进入PLANNING时重置
+    bool stats_active;              // 是否正在统计
+    ros::Time stats_start_time;     // 统计起始时间
+    ros::Time stats_end_time;       // 统计结束时间
+    Eigen::Vector3d stats_prev_pos; // 上一次累计位置
+    double stats_path_length;       // 累计路径长度(米)
+
+    void reset_stats();
+    void update_stats();
+    void finish_and_report_stats(const std::string& reason);
+
 public:
 
     Local_Planner(void):

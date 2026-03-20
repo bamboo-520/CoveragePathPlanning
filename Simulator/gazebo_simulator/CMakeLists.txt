@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.16)
 project(prometheus_gazebo)
 
 # Load catkin and all dependencies required for this package
@@ -59,6 +59,12 @@ add_library(
 target_link_libraries(realsense_gazebo_plugin ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 add_dependencies(realsense_gazebo_plugin ${catkin_EXPORTED_TARGETS})
 
+add_library(
+    move_obstacle_plugin SHARED
+    gazebo_plugin/move_obstacle_plugin.cpp
+)
+target_link_libraries(move_obstacle_plugin ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+add_dependencies(move_obstacle_plugin ${catkin_EXPORTED_TARGETS})
 
 add_executable(qrcode_control cpp_nodes/qrcode_control.cpp)
 add_dependencies(qrcode_control prometheus_gazebo_gencpp) 

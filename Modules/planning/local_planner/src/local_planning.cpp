@@ -1,7 +1,68 @@
 #include "local_planning.h"
 
+#include <cstdio>
+
 namespace Local_Planning
 {
+
+// -------------------------
+// 统计工具函数
+// -------------------------
+void Local_Planner::reset_stats()
+{
+    stats_path_length = 0.0;
+    stats_start_time = ros::Time::now();
+    stats_end_time = ros::Time(0);
+    stats_prev_pos = start_pos;
+    stats_active = true;
+    stats_need_reset = false;
+}
+
+void Local_Planner::update_stats()
+{
+    if (!stats_active)
+    {
+        return;
+    }
+
+    // 使用 start_pos（来自 /prometheus/drone_state）累计距离
+    const double ds = (start_pos - stats_prev_pos).norm();
+
+    // 过滤数值噪声与跳变（例如定位瞬间跳变）
+    if (ds > 1e-4 && ds < 5.0)
+    {
+        stats_path_length += ds;
+        stats_prev_pos = start_pos;
+    }
+    else if (ds <= 1e-4)
+    {
+        // 仅更新 prev_pos，避免长期停滞时误差积累
+        stats_prev_pos = start_pos;
+    }
+}
+
+void Local_Planner::finish_and_report_stats(const std::string& reason)
+{
+    if (!stats_active)
+    {
+        return;
+    }
+
+    stats_end_time = ros::Time::now();
+    stats_active = false;
+
+    const double flight_time = (stats_end_time - stats_start_time).toSec();
+    // 用户要求输出格式：
+    // Arrived. time=... s, distance=... m
+    // 这里 reason 保留但不影响固定格式（方便你未来扩展）
+    (void)reason;
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Arrived. time=%.3f s, distance=%.3f m", flight_time, stats_path_length);
+
+    pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, buf);
+    ROS_INFO_STREAM(NODE_NAME << " " << buf);
+}
 
 // 局部规划算法 初始化函数
 void Local_Planner::init(ros::NodeHandle& nh)
@@ -72,6 +133,12 @@ void Local_Planner::init(ros::NodeHandle& nh)
     sensor_ready = false;
     path_ok = false;
 
+    // 统计初始化
+    stats_need_reset = false;
+    stats_active = false;
+    stats_path_length = 0.0;
+    stats_prev_pos.setZero();
+
     // 初始化发布的指令
     Command_Now.header.stamp = ros::Time::now();
     Command_Now.Mode  = prometheus_msgs::ControlCommand::Idle;
@@ -131,6 +198,9 @@ void Local_Planner::goal_cb(const geometry_msgs::PoseStampedConstPtr& msg)
 
     goal_ready = true;
 
+    // 新目标点：触发统计重置（真正重置放在进入 PLANNING 时，确保 start_pos 已就绪）
+    stats_need_reset = true;
+
     // 获得新目标点
     pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME,"Get a new goal point");
 
@@ -138,6 +208,8 @@ void Local_Planner::goal_cb(const geometry_msgs::PoseStampedConstPtr& msg)
 
     if(goal_pos(0) == 99 && goal_pos(1) == 99 )
     {
+        // 结束统计（触发降落）
+        finish_and_report_stats("Land command");
         path_ok = false;
         goal_ready = false;
         exec_state = EXEC_STATE::LANDING;
@@ -253,11 +325,17 @@ void Local_Planner::control_cb(const ros::TimerEvent& e)
         return;
     }
 
+    // 累计实际路径长度（基于位置变化积分）
+    update_stats();
+
     distance_to_goal = (start_pos - goal_pos).norm();
 
     // 抵达终点
     if(distance_to_goal < MIN_DIS)
     {
+        // 抵达终点：先更新一次统计，再输出结果
+        update_stats();
+        finish_and_report_stats("Reach goal");
         Command_Now.header.stamp = ros::Time::now();
         Command_Now.Mode                                = prometheus_msgs::ControlCommand::Move;
         Command_Now.Command_ID                          = Command_Now.Command_ID + 1;
@@ -356,6 +434,16 @@ void Local_Planner::mainloop_cb(const ros::TimerEvent& e)
                 // 获取到目标点后，生成新轨迹
                 exec_state = EXEC_STATE::PLANNING;
                 goal_ready = false;
+
+                // 进入规划/执行阶段：重置统计
+                if (stats_need_reset)
+                {
+                    reset_stats();
+                    const char* alg_name = (algorithm_mode == 0) ? "APF" : "VFH";
+                    char sp[128];
+                    snprintf(sp, sizeof(sp), "[%s] Start stats (integrate odom distance)", alg_name);
+                    pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, sp);
+                }
             }
             
             break;

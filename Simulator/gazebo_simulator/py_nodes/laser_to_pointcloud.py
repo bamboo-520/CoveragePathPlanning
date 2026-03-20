@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-
+#!/usr/bin/env python3
 import rospy
 from sensor_msgs.msg import PointCloud2 as pc2
 from sensor_msgs.msg import LaserScan 

@@ -1,0 +1,241 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="wind_turbine_world">
+
+    <gui fullscreen="0">
+      <camera name="user_camera">
+        <pose>6 -8 4 0 0.25 2.2</pose>
+        <view_controller>orbit</view_controller>
+      </camera>
+    </gui>
+
+    <physics name="default_physics" default="1" type="ode">
+      <gravity>0 0 -9.8066</gravity>
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+    </physics>
+
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wind_turbine">
+      <static>false</static>
+      <pose>0 0 0 0 0 0</pose>
+
+      <link name="support_link">
+        <pose>0 0 0 0 0 0</pose>
+        <collision name="support_collision">
+          <pose>0 0 0.715 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.1 0.123 1.43</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="support_visual">
+          <geometry>
+            <mesh>
+              <uri>file:///home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine/meshes/Support.stl</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <mass>20</mass>
+          <inertia>
+            <ixx>3.43338</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>3.42482</iyy>
+            <iyz>0</iyz>
+            <izz>0.04188</izz>
+          </inertia>
+        </inertial>
+      </link>
+
+      <link name="center_link">
+        <pose>0 -0.107 1.3884 0 0 0</pose>
+        <collision name="center_collision">
+          <geometry>
+            <box>
+              <size>0.0839 0.11 0.0844</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="center_visual">
+          <pose>0 0.107 -1.3884 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine/meshes/Center.stl</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <mass>4</mass>
+          <inertia>
+            <ixx>0.00640</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.00472</iyy>
+            <iyz>0</iyz>
+            <izz>0.00638</izz>
+          </inertia>
+        </inertial>
+      </link>
+
+      <link name="blade1_link">
+        <pose>0 -0.107 1.3884 0 0 0</pose>
+        <collision name="blade1_collision">
+          <pose>0.2933 0 -0.1695 0 -1.05 0</pose>
+          <geometry>
+            <box>
+              <size>0.0746 0.0374 0.678</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="blade1_visual">
+          <pose>0 0.107 -1.3884 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine/meshes/Blade1.stl</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <mass>1.0</mass>
+          <inertia>
+            <ixx>0.03842</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.03877</iyy>
+            <iyz>0</iyz>
+            <izz>0.00058</izz>
+          </inertia>
+        </inertial>
+      </link>
+
+      <link name="blade2_link">
+        <pose>0 -0.107 1.3884 0 0 0</pose>
+        <collision name="blade2_collision">
+          <pose>-0.2933 0 -0.1695 0 1.05 0</pose>
+          <geometry>
+            <box>
+              <size>0.0746 0.0374 0.678</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="blade2_visual">
+          <pose>0 0.107 -1.3884 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine/meshes/Blade2.stl</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <mass>1.0</mass>
+          <inertia>
+            <ixx>0.03842</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.03877</iyy>
+            <iyz>0</iyz>
+            <izz>0.00058</izz>
+          </inertia>
+        </inertial>
+      </link>
+
+      <link name="blade3_link">
+        <pose>0 -0.107 1.3884 0 0 0</pose>
+        <collision name="blade3_collision">
+          <pose>0 0 0.339 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.0746 0.0374 0.678</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="blade3_visual">
+          <pose>0 0.107 -1.3884 0 0 0</pose>
+          <geometry>
+            <mesh>
+              <uri>file:///home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine/meshes/Blade3.stl</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <inertial>
+          <mass>1.0</mass>
+          <inertia>
+            <ixx>0.03842</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.03877</iyy>
+            <iyz>0</iyz>
+            <izz>0.00058</izz>
+          </inertia>
+        </inertial>
+      </link>
+
+      <joint name="center2support" type="revolute">
+        <parent>support_link</parent>
+        <child>center_link</child>
+        <pose>0 -0.107 1.3884 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit>
+            <lower>-1800</lower>
+            <upper>1800</upper>
+            <effort>10</effort>
+            <velocity>0.009</velocity>
+          </limit>
+        </axis>
+      </joint>
+
+      <joint name="blade12center" type="fixed">
+        <parent>center_link</parent>
+        <child>blade1_link</child>
+      </joint>
+
+      <joint name="blade22center" type="fixed">
+        <parent>center_link</parent>
+        <child>blade2_link</child>
+      </joint>
+
+      <joint name="blade32center" type="fixed">
+        <parent>center_link</parent>
+        <child>blade3_link</child>
+      </joint>
+    </model>
+
+  </world>
+</sdf>

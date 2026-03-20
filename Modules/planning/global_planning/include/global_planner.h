@@ -7,6 +7,8 @@
 #include <iostream>
 #include <algorithm>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Bool.h>
@@ -14,6 +16,7 @@
 #include <sensor_msgs/LaserScan.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
+#include <std_msgs/Float64MultiArray.h>
 
 #include "prometheus_msgs/PositionReference.h"
 #include "prometheus_msgs/Message.h"
@@ -21,6 +24,7 @@
 #include "prometheus_msgs/ControlCommand.h"
 
 #include "A_star.h"
+#include "RRT.h"
 #include "occupy_map.h"
 #include "tools.h"
 #include "message_utils.h"
@@ -72,10 +76,13 @@ private:
 
     // 发布控制指令
     ros::Publisher command_pub,path_cmd_pub;
+    // 发布飞行统计：data[0]=飞行时间(s), data[1]=实际飞行距离(m)
+    ros::Publisher metrics_pub;
     ros::Timer mainloop_timer, track_path_timer, safety_timer;
 
     // A星规划器
     Astar::Ptr Astar_ptr;
+    RRT::Ptr RRT_ptr;
 
     prometheus_msgs::DroneState _DroneState;
     nav_msgs::Odometry Drone_odom;
@@ -105,6 +112,17 @@ private:
 
     ros::Time tra_start_time;
     float tra_running_time;
+
+    // 飞行统计（实际飞行距离 & 到达时间）
+    bool metrics_running{false};
+    bool metrics_last_pos_valid{false};
+    bool final_goal_cmd_sent{false};
+    ros::Time metrics_start_time;
+    Eigen::Vector3d metrics_last_pos;
+    double metrics_distance_m{0.0};
+    double arrive_dist{0.3};        // [m] 抵达判定距离阈值
+    double arrive_vel{0.2};         // [m/s] 抵达判定速度阈值
+    double metrics_min_step{0.01};  // [m] 去除抖动噪声
     
     // 打印的提示消息
     string message;
