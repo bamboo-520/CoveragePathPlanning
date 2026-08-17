@@ -43,6 +43,8 @@ add_executable(global_planner_main
 	src/global_planner.cpp
 	src/A_star.cpp
 	src/RRT.cpp
+	src/Dijkstra.cpp
+	src/RRT_star.cpp
 	src/occupy_map.cpp
 	src/tools.cpp
 	)
@@ -52,20 +54,29 @@ target_link_libraries(global_planner_main
 	   ${PCL_LIBRARIES}
 	)
 
-add_executable(wind_turbine_model_pcl_pub
-    src/wind_turbine_model_pcl_pub.cpp
-)
+# add_executable(wind_turbine_model_pcl_pub
+#     src/wind_turbine_model_pcl_pub.cpp
+# )
 
-target_link_libraries(wind_turbine_model_pcl_pub
-    ${catkin_LIBRARIES}
-    ${PCL_LIBRARIES}
-)
+# target_link_libraries(wind_turbine_model_pcl_pub
+#     ${catkin_LIBRARIES}
+#     ${PCL_LIBRARIES}
+# )
 
-add_executable(wind_turbine_coverage_planner
-    src/wind_turbine_coverage_planner.cpp
-)
+# add_executable(wind_turbine_coverage_planner
+#     src/wind_turbine_coverage_planner.cpp
+# )
 
-target_link_libraries(wind_turbine_coverage_planner
-    ${catkin_LIBRARIES}
-    ${PCL_LIBRARIES}
-)
+# target_link_libraries(wind_turbine_coverage_planner
+#     ${catkin_LIBRARIES}
+#     ${PCL_LIBRARIES}
+# )
+
+# add_executable(wind_turbine_coverage_plannner_reciprocate
+#     src/wind_turbine_coverage_plannner_reciprocate.cpp
+# )
+
+# target_link_libraries(wind_turbine_coverage_plannner_reciprocate
+#     ${catkin_LIBRARIES}
+#     ${PCL_LIBRARIES}
+# )

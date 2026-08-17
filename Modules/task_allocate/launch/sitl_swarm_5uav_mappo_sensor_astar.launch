@@ -1,0 +1,252 @@
+<launch>
+    <!--
+        最新版本：MAPPO顺序决策任务分配 + 传感器障碍物风险 + A*实际路径 + 可选路径点控制下发。
+        说明：障碍物不再通过代码 obstacle_list 计算，默认由 obstacle.world 场景提供；A*使用传感器点云/激光构建的障碍物点进行避障。
+        fix6：启用在线重规划、关闭路径平滑、增大传感器障碍物膨胀半径，避免只按初始路径飞行导致撞障。
+    -->
+    <arg name="swarm_num_uav" default="5"/>
+    <arg name="uav1_id" default="1"/>
+    <arg name="uav2_id" default="2"/>
+    <arg name="uav3_id" default="3"/>
+    <arg name="uav4_id" default="4"/>
+    <arg name="uav5_id" default="5"/>
+
+    <arg name="uav1_init_x" default="0.0"/><arg name="uav1_init_y" default="-16.0"/>
+    <arg name="uav2_init_x" default="0.0"/><arg name="uav2_init_y" default="-8.0"/>
+    <arg name="uav3_init_x" default="0.0"/><arg name="uav3_init_y" default="0.0"/>
+    <arg name="uav4_init_x" default="0.0"/><arg name="uav4_init_y" default="8.0"/>
+    <arg name="uav5_init_x" default="0.0"/><arg name="uav5_init_y" default="16.0"/>
+
+    <arg name="input_source" default="2"/>
+    <arg name="collision_flag" default="0"/>
+    <arg name="Takeoff_height" default="2.0"/>
+    <arg name="Disarm_height" default="0.2"/>
+    <arg name="Land_speed" default="0.2"/>
+    <arg name="Land_mode" default="1"/>
+
+    <arg name="x_min" default="-20.0"/><arg name="x_max" default="80.0"/>
+    <arg name="y_min" default="-35.0"/><arg name="y_max" default="35.0"/>
+    <arg name="z_min" default="-1.0"/><arg name="z_max" default="30.0"/>
+
+    <arg name="gui" default="true"/>
+    <arg name="debug" default="false"/>
+    <arg name="verbose" default="false"/>
+    <arg name="paused" default="false"/>
+    <arg name="respawn_gazebo" default="false"/>
+    <arg name="world" default="$(find prometheus_task_allocate)/worlds/obstacle.world"/>
+    <arg name="visualization" default="true"/>
+    <arg name="rviz_file" default="$(find prometheus_task_allocate)/rviz/mappo_task_assignment_astar.rviz"/>
+
+    <arg name="launch_ground_station" default="true"/>
+    <arg name="launch_formation_control" default="false"/>
+    <arg name="use_demo_positions" default="false"/>
+    <arg name="auto_dispatch_commands" default="false"/>
+    <arg name="assignment_period" default="1.0"/>
+    <arg name="enable_gazebo_visualization" default="true"/>
+    <arg name="gazebo_respawn_each_assignment" default="false"/>
+
+    <arg name="visualize_uav_as_mesh" default="true"/>
+    <arg name="uav_mesh_resource" default="file:///home/amov/Prometheus/Simulator/gazebo_simulator/amov_models/Multisolo/meshes/solo.stl"/>
+    <arg name="rviz_uav_mesh_scale" default="1.0"/>
+    <arg name="rviz_uav_mesh_z_offset" default="0.0"/>
+
+    <arg name="enable_obstacle_risk_in_assignment" default="true"/>
+    <arg name="enable_astar_path_planning" default="true"/>
+    <arg name="astar_resolution" default="0.5"/>
+    <arg name="astar_sensor_obstacle_inflation" default="3.0"/>
+
+    <!-- 传感器话题模板：%d 会替换为无人机编号。若你本机话题不同，只改这两个参数即可。 -->
+    <arg name="sensor_pointcloud_topic_template" default="/uav%d/prometheus/sensors/pcl2"/>
+    <arg name="sensor_laserscan_topic_template" default="/uav%d/prometheus/sensors/2Dlidar_scan"/>
+    <arg name="sensor_points_are_world_frame" default="false"/>
+    <!-- fix5: 2D lidar is the primary obstacle source. PointCloud2 may contain self/ground points in some Multisolo setups. -->
+    <arg name="sensor_subscribe_pointcloud" default="false"/>
+    <arg name="sensor_subscribe_laserscan" default="true"/>
+    <arg name="enable_sensor_stop_failsafe" default="true"/>
+    <arg name="wait_for_sensor_map_before_planning" default="true"/>
+
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="gui" value="$(arg gui)"/>
+        <arg name="debug" value="$(arg debug)"/>
+        <arg name="verbose" value="$(arg verbose)"/>
+        <arg name="paused" value="$(arg paused)"/>
+        <arg name="respawn_gazebo" value="$(arg respawn_gazebo)"/>
+        <arg name="world_name" value="$(arg world)"/>
+    </include>
+
+    <include file="$(find prometheus_gazebo)/launch_swarm/sitl_swarm_basic.launch">
+        <arg name="swarm_num_uav" value="$(arg swarm_num_uav)"/><arg name="uav_id" value="$(arg uav1_id)"/>
+        <arg name="sdf" value="$(find prometheus_gazebo)/amov_models/Multisolo/uav1/uav1.sdf"/><arg name="model" value="uav1"/>
+        <arg name="uav_init_x" value="$(arg uav1_init_x)"/><arg name="uav_init_y" value="$(arg uav1_init_y)"/><arg name="uav_init_z" value="0.15"/><arg name="uav_init_yaw" value="0.0"/>
+    </include>
+    <include file="$(find prometheus_gazebo)/launch_swarm/sitl_swarm_basic.launch">
+        <arg name="swarm_num_uav" value="$(arg swarm_num_uav)"/><arg name="uav_id" value="$(arg uav2_id)"/>
+        <arg name="sdf" value="$(find prometheus_gazebo)/amov_models/Multisolo/uav2/uav2.sdf"/><arg name="model" value="uav2"/>
+        <arg name="uav_init_x" value="$(arg uav2_init_x)"/><arg name="uav_init_y" value="$(arg uav2_init_y)"/><arg name="uav_init_z" value="0.15"/><arg name="uav_init_yaw" value="0.0"/>
+    </include>
+    <include file="$(find prometheus_gazebo)/launch_swarm/sitl_swarm_basic.launch">
+        <arg name="swarm_num_uav" value="$(arg swarm_num_uav)"/><arg name="uav_id" value="$(arg uav3_id)"/>
+        <arg name="sdf" value="$(find prometheus_gazebo)/amov_models/Multisolo/uav3/uav3.sdf"/><arg name="model" value="uav3"/>
+        <arg name="uav_init_x" value="$(arg uav3_init_x)"/><arg name="uav_init_y" value="$(arg uav3_init_y)"/><arg name="uav_init_z" value="0.15"/><arg name="uav_init_yaw" value="0.0"/>
+    </include>
+    <include file="$(find prometheus_gazebo)/launch_swarm/sitl_swarm_basic.launch">
+        <arg name="swarm_num_uav" value="$(arg swarm_num_uav)"/><arg name="uav_id" value="$(arg uav4_id)"/>
+        <arg name="sdf" value="$(find prometheus_gazebo)/amov_models/Multisolo/uav4/uav4.sdf"/><arg name="model" value="uav4"/>
+        <arg name="uav_init_x" value="$(arg uav4_init_x)"/><arg name="uav_init_y" value="$(arg uav4_init_y)"/><arg name="uav_init_z" value="0.15"/><arg name="uav_init_yaw" value="0.0"/>
+    </include>
+    <include file="$(find prometheus_gazebo)/launch_swarm/sitl_swarm_basic.launch">
+        <arg name="swarm_num_uav" value="$(arg swarm_num_uav)"/><arg name="uav_id" value="$(arg uav5_id)"/>
+        <arg name="sdf" value="$(find prometheus_gazebo)/amov_models/Multisolo/uav5/uav5.sdf"/><arg name="model" value="uav5"/>
+        <arg name="uav_init_x" value="$(arg uav5_init_x)"/><arg name="uav_init_y" value="$(arg uav5_init_y)"/><arg name="uav_init_z" value="0.15"/><arg name="uav_init_yaw" value="0.0"/>
+    </include>
+
+    <node pkg="prometheus_swarm_control" type="swarm_estimator" name="swarm_estimator_uav1" output="screen"><param name="uav_id" value="$(arg uav1_id)"/><param name="input_source" value="$(arg input_source)" /></node>
+    <node pkg="prometheus_swarm_control" type="swarm_estimator" name="swarm_estimator_uav2" output="screen"><param name="uav_id" value="$(arg uav2_id)"/><param name="input_source" value="$(arg input_source)" /></node>
+    <node pkg="prometheus_swarm_control" type="swarm_estimator" name="swarm_estimator_uav3" output="screen"><param name="uav_id" value="$(arg uav3_id)"/><param name="input_source" value="$(arg input_source)" /></node>
+    <node pkg="prometheus_swarm_control" type="swarm_estimator" name="swarm_estimator_uav4" output="screen"><param name="uav_id" value="$(arg uav4_id)"/><param name="input_source" value="$(arg input_source)" /></node>
+    <node pkg="prometheus_swarm_control" type="swarm_estimator" name="swarm_estimator_uav5" output="screen"><param name="uav_id" value="$(arg uav5_id)"/><param name="input_source" value="$(arg input_source)" /></node>
+
+    <node pkg="prometheus_swarm_control" type="swarm_controller" name="swarm_controller_uav1" output="screen"><param name="swarm_num_uav" value="$(arg swarm_num_uav)"/><param name="uav_id" value="$(arg uav1_id)"/><param name="collision_flag" value="$(arg collision_flag)"/><param name="Takeoff_height" value="$(arg Takeoff_height)"/><param name="Disarm_height" value="$(arg Disarm_height)"/><param name="Land_speed" value="$(arg Land_speed)"/><param name="Land_mode" value="$(arg Land_mode)"/><param name="geo_fence/x_min" value="$(arg x_min)"/><param name="geo_fence/x_max" value="$(arg x_max)"/><param name="geo_fence/y_min" value="$(arg y_min)"/><param name="geo_fence/y_max" value="$(arg y_max)"/><param name="geo_fence/z_min" value="$(arg z_min)"/><param name="geo_fence/z_max" value="$(arg z_max)"/></node>
+    <node pkg="prometheus_swarm_control" type="swarm_controller" name="swarm_controller_uav2" output="screen"><param name="swarm_num_uav" value="$(arg swarm_num_uav)"/><param name="uav_id" value="$(arg uav2_id)"/><param name="collision_flag" value="$(arg collision_flag)"/><param name="Takeoff_height" value="$(arg Takeoff_height)"/><param name="Disarm_height" value="$(arg Disarm_height)"/><param name="Land_speed" value="$(arg Land_speed)"/><param name="Land_mode" value="$(arg Land_mode)"/><param name="geo_fence/x_min" value="$(arg x_min)"/><param name="geo_fence/x_max" value="$(arg x_max)"/><param name="geo_fence/y_min" value="$(arg y_min)"/><param name="geo_fence/y_max" value="$(arg y_max)"/><param name="geo_fence/z_min" value="$(arg z_min)"/><param name="geo_fence/z_max" value="$(arg z_max)"/></node>
+    <node pkg="prometheus_swarm_control" type="swarm_controller" name="swarm_controller_uav3" output="screen"><param name="swarm_num_uav" value="$(arg swarm_num_uav)"/><param name="uav_id" value="$(arg uav3_id)"/><param name="collision_flag" value="$(arg collision_flag)"/><param name="Takeoff_height" value="$(arg Takeoff_height)"/><param name="Disarm_height" value="$(arg Disarm_height)"/><param name="Land_speed" value="$(arg Land_speed)"/><param name="Land_mode" value="$(arg Land_mode)"/><param name="geo_fence/x_min" value="$(arg x_min)"/><param name="geo_fence/x_max" value="$(arg x_max)"/><param name="geo_fence/y_min" value="$(arg y_min)"/><param name="geo_fence/y_max" value="$(arg y_max)"/><param name="geo_fence/z_min" value="$(arg z_min)"/><param name="geo_fence/z_max" value="$(arg z_max)"/></node>
+    <node pkg="prometheus_swarm_control" type="swarm_controller" name="swarm_controller_uav4" output="screen"><param name="swarm_num_uav" value="$(arg swarm_num_uav)"/><param name="uav_id" value="$(arg uav4_id)"/><param name="collision_flag" value="$(arg collision_flag)"/><param name="Takeoff_height" value="$(arg Takeoff_height)"/><param name="Disarm_height" value="$(arg Disarm_height)"/><param name="Land_speed" value="$(arg Land_speed)"/><param name="Land_mode" value="$(arg Land_mode)"/><param name="geo_fence/x_min" value="$(arg x_min)"/><param name="geo_fence/x_max" value="$(arg x_max)"/><param name="geo_fence/y_min" value="$(arg y_min)"/><param name="geo_fence/y_max" value="$(arg y_max)"/><param name="geo_fence/z_min" value="$(arg z_min)"/><param name="geo_fence/z_max" value="$(arg z_max)"/></node>
+    <node pkg="prometheus_swarm_control" type="swarm_controller" name="swarm_controller_uav5" output="screen"><param name="swarm_num_uav" value="$(arg swarm_num_uav)"/><param name="uav_id" value="$(arg uav5_id)"/><param name="collision_flag" value="$(arg collision_flag)"/><param name="Takeoff_height" value="$(arg Takeoff_height)"/><param name="Disarm_height" value="$(arg Disarm_height)"/><param name="Land_speed" value="$(arg Land_speed)"/><param name="Land_mode" value="$(arg Land_mode)"/><param name="geo_fence/x_min" value="$(arg x_min)"/><param name="geo_fence/x_max" value="$(arg x_max)"/><param name="geo_fence/y_min" value="$(arg y_min)"/><param name="geo_fence/y_max" value="$(arg y_max)"/><param name="geo_fence/z_min" value="$(arg z_min)"/><param name="geo_fence/z_max" value="$(arg z_max)"/></node>
+
+    <group if="$(arg launch_ground_station)">
+        <node pkg="prometheus_swarm_control" type="swarm_ground_station" name="swarm_ground_station" output="screen" launch-prefix="gnome-terminal --tab --">
+            <param name="swarm_num_uav" value="$(arg swarm_num_uav)"/>
+        </node>
+    </group>
+
+    <group if="$(arg launch_formation_control)">
+        <node pkg="prometheus_swarm_control" type="swarm_formation_control" name="swarm_formation_control" output="screen" launch-prefix="gnome-terminal --">
+            <param name="swarm_num_uav" value="$(arg swarm_num_uav)"/>
+            <param name="formation_size" value="1.0"/>
+            <param name="sim_mode" value="true"/>
+            <param name="controller_num" value="0"/>
+        </node>
+    </group>
+
+    <node pkg="prometheus_task_allocate" type="swarm_task_assignment_mappo" name="swarm_task_assignment_mappo" output="screen">
+        <param name="swarm_num_uav" value="$(arg swarm_num_uav)" />
+        <param name="assignment_policy" value="mappo_sequential_action_mask_sensor_risk_astar" />
+        <param name="use_demo_positions" value="$(arg use_demo_positions)" />
+        <param name="auto_dispatch_commands" value="$(arg auto_dispatch_commands)" />
+        <param name="assignment_period" value="$(arg assignment_period)" />
+        <param name="run_once" value="false" />
+        <param name="frame_id" value="world" />
+        <param name="default_height" value="2.5" />
+        <param name="default_energy" value="100.0" />
+        <param name="max_distance" value="95.0" />
+        <param name="yaw_ref" value="0.0" />
+
+        <param name="enable_rviz_visualization" value="true" />
+        <param name="visualize_uav_as_mesh" value="$(arg visualize_uav_as_mesh)" />
+        <param name="use_gazebo_model_states_for_rviz_uav" value="true" />
+        <param name="use_gazebo_model_states_for_assignment" value="true" />
+        <param name="wait_for_gazebo_model_states" value="true" />
+        <param name="default_uav_mesh_resource" value="$(arg uav_mesh_resource)" />
+        <param name="rviz_uav_mesh_scale" value="$(arg rviz_uav_mesh_scale)" />
+        <param name="rviz_uav_mesh_z_offset" value="$(arg rviz_uav_mesh_z_offset)" />
+
+        <param name="enable_gazebo_visualization" value="$(arg enable_gazebo_visualization)" />
+        <param name="gazebo_respawn_each_assignment" value="$(arg gazebo_respawn_each_assignment)" />
+        <param name="gazebo_visual_collision" value="false" />
+        <param name="gazebo_obstacle_collision" value="false" />
+        <param name="gazebo_path_skip_start_points" value="1" />
+        <param name="gazebo_path_skip_goal_points" value="1" />
+        <param name="gazebo_path_marker_z_offset" value="0.20" />
+        <param name="gazebo_task_radius" value="0.55" />
+        <param name="gazebo_path_marker_radius" value="0.15" />
+
+        <param name="enable_obstacle_visualization" value="false" />
+        <param name="enable_obstacle_risk_in_assignment" value="$(arg enable_obstacle_risk_in_assignment)" />
+        <param name="use_param_obstacles_for_assignment" value="false" />
+        <param name="use_param_obstacles_for_astar" value="false" />
+        <param name="wait_for_sensor_map_before_planning" value="$(arg wait_for_sensor_map_before_planning)" />
+        <param name="obstacle_risk_weight" value="4.0" />
+        <param name="obstacle_risk_safe_margin" value="6.0" />
+        <param name="risk_include_danger_zone" value="true" />
+        <param name="risk_sample_num" value="60" />
+
+        <param name="enable_astar_path_planning" value="$(arg enable_astar_path_planning)" />
+        <param name="publish_only_astar_success_path" value="true" />
+        <param name="astar/x_min" value="$(arg x_min)" />
+        <param name="astar/x_max" value="$(arg x_max)" />
+        <param name="astar/y_min" value="$(arg y_min)" />
+        <param name="astar/y_max" value="$(arg y_max)" />
+        <param name="astar/resolution" value="$(arg astar_resolution)" />
+        <param name="astar/obstacle_inflation" value="0.0" />
+        <param name="astar/use_sensor_obstacles" value="true" />
+        <param name="astar/sensor_obstacle_inflation" value="$(arg astar_sensor_obstacle_inflation)" />
+        <param name="astar/avoid_danger_zone" value="false" />
+        <param name="astar/allow_diagonal" value="true" />
+        <param name="astar/smooth_path" value="false" />
+        <param name="astar/path_z_offset" value="0.15" />
+
+        <param name="sensor_map/enabled" value="true" />
+        <param name="sensor_map/subscribe_pointcloud" value="$(arg sensor_subscribe_pointcloud)" />
+        <param name="sensor_map/subscribe_laserscan" value="$(arg sensor_subscribe_laserscan)" />
+        <param name="sensor_map/sensor_points_are_world_frame" value="$(arg sensor_points_are_world_frame)" />
+        <param name="sensor_map/max_range" value="55.0" />
+        <param name="sensor_map/z_min" value="-0.5" />
+        <param name="sensor_map/z_max" value="8.0" />
+        <param name="sensor_map/downsample_resolution" value="0.6" />
+        <param name="sensor_map/point_lifetime" value="8.0" />
+        <param name="sensor_map/max_points" value="5000" />
+        <!-- Ignore near-field self returns when computing emergency stop distance. -->
+        <param name="sensor_map/self_filter_radius" value="1.2" />
+        <param name="sensor_map/pointcloud_topic_template" value="$(arg sensor_pointcloud_topic_template)" />
+        <param name="sensor_map/laserscan_topic_template" value="$(arg sensor_laserscan_topic_template)" />
+
+        <param name="sensor_stop_failsafe/enabled" value="$(arg enable_sensor_stop_failsafe)" />
+        <!-- fix7: this stop check is active only during A* path following, not during OFFBOARD/Takeoff. -->
+        <param name="sensor_stop_failsafe/stop_distance" value="1.0" />
+
+        <param name="path_dispatch/enabled" value="true" />
+        <param name="path_dispatch/replan_while_dispatching" value="true" />
+        <param name="path_dispatch/allow_preflight_without_path" value="true" />
+        <param name="path_dispatch/waypoint_reach_threshold" value="0.8" />
+        <param name="path_dispatch/command_period" value="0.20" />
+        <param name="path_dispatch/yaw_ref" value="0.0" />
+        <param name="path_dispatch/min_waypoint_index" value="1" />
+        <!-- 先触发 swarm_controller 切 OFFBOARD/解锁，再起飞，最后才跟踪 A* 路径。 -->
+        <param name="path_dispatch/enable_preflight_sequence" value="true" />
+        <param name="path_dispatch/offboard_prepare_time" value="3.0" />
+        <param name="path_dispatch/takeoff_reach_height" value="1.5" />
+        <param name="path_dispatch/takeoff_timeout" value="8.0" />
+
+        <rosparam param="uav_model_names">[uav1, uav2, uav3, uav4, uav5]</rosparam>
+
+        <rosparam param="uav_capability_matrix">
+            - [1, 1, 0]
+            - [0, 1, 1]
+            - [1, 0, 1]
+            - [0, 1, 0]
+            - [1, 1, 1]
+        </rosparam>
+
+        <rosparam param="task_list">
+            - [1, 0, 42.0, -22.0, 2.5, 9.0]
+            - [2, 1, 35.0,  22.0, 2.5, 7.0]
+            - [3, 2, 54.0,  -6.0, 2.5, 8.0]
+            - [4, 1, 28.0, -12.0, 2.5, 5.0]
+            - [5, 0, 58.0,  16.0, 2.5, 6.0]
+        </rosparam>
+
+        <rosparam param="demo_uav_positions">
+            - [1, 0.0, -16.0, 2.5]
+            - [2, 0.0,  -8.0, 2.5]
+            - [3, 0.0,   0.0, 2.5]
+            - [4, 0.0,   8.0, 2.5]
+            - [5, 0.0,  16.0, 2.5]
+        </rosparam>
+
+        <rosparam param="actor_weights">[-1.0, 3.0, 2.0, 0.5, 5.0, 2.0, 1.0]</rosparam>
+        <rosparam param="idle_weights">[0.0, -0.2, 2.0]</rosparam>
+    </node>
+
+    <group if="$(arg visualization)">
+        <node type="rviz" name="rviz" pkg="rviz" args="-d $(arg rviz_file)" />
+    </group>
+</launch>

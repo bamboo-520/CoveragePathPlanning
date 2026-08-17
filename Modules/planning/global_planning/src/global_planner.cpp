@@ -13,7 +13,7 @@ void Global_Planner::init(ros::NodeHandle& nh)
     nh.param("global_planner/fly_height_2D", fly_height_2D, 1.0);  
     // 安全距离，若膨胀距离设置已考虑安全距离，建议此处设为0
     nh.param("global_planner/safe_distance", safe_distance, 0.05);
-    // 规划算法选择：0=A*, 1=RRT
+    // 规划算法选择：0=A*, 1=RRT, 2=Dijkstra, 3=RRT*
     nh.param("global_planner/algorithm_mode", algorithm_mode, 0); 
     nh.param("global_planner/time_per_path", time_per_path, 1.0); 
     // 重规划频率 
@@ -22,6 +22,9 @@ void Global_Planner::init(ros::NodeHandle& nh)
     nh.param("global_planner/arrive_dist", arrive_dist, 0.3);
     nh.param("global_planner/arrive_vel", arrive_vel, 0.2);
     nh.param("global_planner/metrics_min_step", metrics_min_step, 0.01);
+    nh.param("global_planner/no_replan_dist", no_replan_dist, 1.0);
+    nh.param("global_planner/small_turn_thresh_deg", small_turn_thresh_deg, 5.0);
+    nh.param("global_planner/large_turn_thresh_deg", large_turn_thresh_deg, 15.0);
     // 选择地图更新方式：　0代表全局点云，１代表局部点云，２代表激光雷达scan数据
     nh.param("global_planner/map_input", map_input, 0); 
     // 是否为仿真模式
@@ -69,11 +72,23 @@ void Global_Planner::init(ros::NodeHandle& nh)
         Astar_ptr->init(nh);
         pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "A_star init.");
     }
-    else
+    else if (algorithm_mode == 1)
     {
         RRT_ptr.reset(new RRT);
         RRT_ptr->init(nh);
         pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "RRT init.");
+    }
+    else if (algorithm_mode == 2)
+    {
+        Dijkstra_ptr.reset(new Dijkstra);
+        Dijkstra_ptr->init(nh);
+        pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "Dijkstra init.");
+    }
+    else
+    {
+        RRTstar_ptr.reset(new RRTStar);
+        RRTstar_ptr->init(nh);
+        pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, "RRT* init.");
     }
     // 规划器状态参数初始化
     exec_state = EXEC_STATE::WAIT_GOAL;
@@ -89,6 +104,9 @@ void Global_Planner::init(ros::NodeHandle& nh)
     metrics_last_pos_valid = false;
     final_goal_cmd_sent = false;
     metrics_distance_m = 0.0;
+    metrics_avg_turn_deg = 0.0;
+    metrics_smoothness_pct = 100.0;
+    metrics_traj_points.clear();
 
     // 初始化发布的指令
     Command_Now.header.stamp = ros::Time::now();
@@ -168,6 +186,9 @@ void Global_Planner::goal_cb(const geometry_msgs::PoseStampedConstPtr& msg)
     metrics_last_pos_valid = false;
     final_goal_cmd_sent = false;
     metrics_distance_m = 0.0;
+    metrics_avg_turn_deg = 0.0;
+    metrics_smoothness_pct = 100.0;
+    metrics_traj_points.clear();
     // 用接收goal的时刻作为起点（若use_sim_time则为仿真时钟）
     metrics_start_time = ros::Time::now();
     // 获得新目标点
@@ -206,7 +227,7 @@ void Global_Planner::drone_state_cb(const prometheus_msgs::DroneStateConstPtr& m
 
     start_acc << 0.0, 0.0, 0.0;
 
-    // 统计实际飞行距离：从收到goal开始累计，期间不因重规划/状态切换中断（仅在LANDING时停）
+    // 基于 drone_state 统计实际飞行轨迹、飞行距离与转角序列
     if (metrics_running && exec_state != EXEC_STATE::LANDING)
     {
         Eigen::Vector3d cur_pos(start_pos[0], start_pos[1], start_pos[2]);
@@ -214,6 +235,7 @@ void Global_Planner::drone_state_cb(const prometheus_msgs::DroneStateConstPtr& m
         {
             metrics_last_pos = cur_pos;
             metrics_last_pos_valid = true;
+            metrics_traj_points.push_back(cur_pos);
         }
         else
         {
@@ -222,6 +244,7 @@ void Global_Planner::drone_state_cb(const prometheus_msgs::DroneStateConstPtr& m
             {
                 metrics_distance_m += step;
                 metrics_last_pos = cur_pos;
+                metrics_traj_points.push_back(cur_pos);
             }
         }
     }
@@ -264,9 +287,15 @@ void Global_Planner::Gpointcloud_cb(const sensor_msgs::PointCloud2ConstPtr &msg)
     if(!map_groundtruth)
     {
         // 对Astar中的地图进行更新
-        (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->map_update_gpcl(msg);
+        if(algorithm_mode==0) Astar_ptr->Occupy_map_ptr->map_update_gpcl(msg);
+        else if(algorithm_mode==1) RRT_ptr->Occupy_map_ptr->map_update_gpcl(msg);
+        else if(algorithm_mode==2) Dijkstra_ptr->Occupy_map_ptr->map_update_gpcl(msg);
+        else RRTstar_ptr->Occupy_map_ptr->map_update_gpcl(msg);
         // 并对地图进行膨胀
-        (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->inflate_point_cloud(); 
+        if(algorithm_mode==0) Astar_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else if(algorithm_mode==1) RRT_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else if(algorithm_mode==2) Dijkstra_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else RRTstar_ptr->Occupy_map_ptr->inflate_point_cloud(); 
     }else
     {
         static int update_num=0;
@@ -276,9 +305,15 @@ void Global_Planner::Gpointcloud_cb(const sensor_msgs::PointCloud2ConstPtr &msg)
         if(update_num == 10)
         {
             // 对Astar中的地图进行更新
-            (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->map_update_gpcl(msg);
+            if(algorithm_mode==0) Astar_ptr->Occupy_map_ptr->map_update_gpcl(msg);
+        else if(algorithm_mode==1) RRT_ptr->Occupy_map_ptr->map_update_gpcl(msg);
+        else if(algorithm_mode==2) Dijkstra_ptr->Occupy_map_ptr->map_update_gpcl(msg);
+        else RRTstar_ptr->Occupy_map_ptr->map_update_gpcl(msg);
             // 并对地图进行膨胀
-            (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->inflate_point_cloud(); 
+            if(algorithm_mode==0) Astar_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else if(algorithm_mode==1) RRT_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else if(algorithm_mode==2) Dijkstra_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else RRTstar_ptr->Occupy_map_ptr->inflate_point_cloud(); 
             update_num = 0;
         } 
     }
@@ -298,9 +333,15 @@ void Global_Planner::Lpointcloud_cb(const sensor_msgs::PointCloud2ConstPtr &msg)
     sensor_ready = true;
 
     // 对Astar中的地图进行更新（局部地图+odom）
-    (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->map_update_lpcl(msg, Drone_odom);
+    if(algorithm_mode==0) Astar_ptr->Occupy_map_ptr->map_update_lpcl(msg, Drone_odom);
+    else if(algorithm_mode==1) RRT_ptr->Occupy_map_ptr->map_update_lpcl(msg, Drone_odom);
+    else if(algorithm_mode==2) Dijkstra_ptr->Occupy_map_ptr->map_update_lpcl(msg, Drone_odom);
+    else RRTstar_ptr->Occupy_map_ptr->map_update_lpcl(msg, Drone_odom);
     // 并对地图进行膨胀
-    (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->inflate_point_cloud(); 
+    if(algorithm_mode==0) Astar_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else if(algorithm_mode==1) RRT_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else if(algorithm_mode==2) Dijkstra_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else RRTstar_ptr->Occupy_map_ptr->inflate_point_cloud(); 
 }
 
 // 根据2维雷达数据更新地图
@@ -316,9 +357,15 @@ void Global_Planner::laser_cb(const sensor_msgs::LaserScanConstPtr &msg)
     sensor_ready = true;
 
     // 对Astar中的地图进行更新（laser+odom）
-    (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->map_update_laser(msg, Drone_odom);
+    if(algorithm_mode==0) Astar_ptr->Occupy_map_ptr->map_update_laser(msg, Drone_odom);
+    else if(algorithm_mode==1) RRT_ptr->Occupy_map_ptr->map_update_laser(msg, Drone_odom);
+    else if(algorithm_mode==2) Dijkstra_ptr->Occupy_map_ptr->map_update_laser(msg, Drone_odom);
+    else RRTstar_ptr->Occupy_map_ptr->map_update_laser(msg, Drone_odom);
     // 并对地图进行膨胀
-    (algorithm_mode==0?Astar_ptr->Occupy_map_ptr:RRT_ptr->Occupy_map_ptr)->inflate_point_cloud(); 
+    if(algorithm_mode==0) Astar_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else if(algorithm_mode==1) RRT_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else if(algorithm_mode==2) Dijkstra_ptr->Occupy_map_ptr->inflate_point_cloud();
+        else RRTstar_ptr->Occupy_map_ptr->inflate_point_cloud(); 
 }
 
 void Global_Planner::track_path_cb(const ros::TimerEvent& e)
@@ -467,17 +514,25 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
         {
             
             // 重置规划器
-            if(algorithm_mode==0) Astar_ptr->reset(); else RRT_ptr->reset();
+            if(algorithm_mode==0) Astar_ptr->reset();
+            else if(algorithm_mode==1) RRT_ptr->reset();
+            else if(algorithm_mode==2) Dijkstra_ptr->reset();
+            else RRTstar_ptr->reset();
             // 使用规划器执行搜索，返回搜索结果
 
             int astar_state;
 
             // Astar algorithm
             if(algorithm_mode==0) astar_state = Astar_ptr->search(start_pos, goal_pos);
-            else astar_state = RRT_ptr->search(start_pos, goal_pos);
+            else if(algorithm_mode==1) astar_state = RRT_ptr->search(start_pos, goal_pos);
+            else if(algorithm_mode==2) astar_state = Dijkstra_ptr->search(start_pos, goal_pos);
+            else astar_state = RRTstar_ptr->search(start_pos, goal_pos);
 
             // 未寻找到路径
-            if(astar_state==(algorithm_mode==0?Astar::NO_PATH:RRT::NO_PATH))
+            if((algorithm_mode==0 && astar_state==Astar::NO_PATH) ||
+               (algorithm_mode==1 && astar_state==RRT::NO_PATH) ||
+               (algorithm_mode==2 && astar_state==Dijkstra::NO_PATH) ||
+               (algorithm_mode==3 && astar_state==RRTStar::NO_PATH))
             {
                 path_ok = false;
                 exec_state = EXEC_STATE::WAIT_GOAL;
@@ -487,7 +542,10 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
             {
                 path_ok = true;
                 is_new_path = true;
-                path_cmd = (algorithm_mode==0?Astar_ptr->get_ros_path():RRT_ptr->get_ros_path());
+                if(algorithm_mode==0) path_cmd = Astar_ptr->get_ros_path();
+                else if(algorithm_mode==1) path_cmd = RRT_ptr->get_ros_path();
+                else if(algorithm_mode==2) path_cmd = Dijkstra_ptr->get_ros_path();
+                else path_cmd = RRTstar_ptr->get_ros_path();
                 Num_total_wp = path_cmd.poses.size();
                 start_point_index = get_start_point_id();
                 cur_id = start_point_index;
@@ -498,6 +556,9 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
                 {
                     metrics_running = true;
                     metrics_distance_m = 0.0;
+                    metrics_avg_turn_deg = 0.0;
+                    metrics_smoothness_pct = 100.0;
+                    metrics_traj_points.clear();
                     metrics_start_time = ros::Time::now();
                     metrics_last_pos_valid = false;   // 由 drone_state_cb 首次回调时用当前位置初始化
                 }
@@ -525,15 +586,21 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
                 {
                     const ros::Time now_t = (_DroneState.header.stamp.isZero() ? ros::Time::now() : _DroneState.header.stamp);
                     const double t = (now_t - metrics_start_time).toSec();
+                    compute_turn_metrics(metrics_avg_turn_deg, metrics_smoothness_pct);
+
                     std_msgs::Float64MultiArray m;
-                    m.data.resize(2);
+                    m.data.resize(4);
                     m.data[0] = t;
                     m.data[1] = metrics_distance_m;
+                    m.data[2] = metrics_avg_turn_deg;
+                    m.data[3] = metrics_smoothness_pct;
                     metrics_pub.publish(m);
 
                     std::ostringstream ss;
                     ss << "Arrived. time=" << std::fixed << std::setprecision(2) << t
-                       << " s, distance=" << metrics_distance_m << " m";
+                       << " s, distance=" << metrics_distance_m
+                       << " m, avg_turn=" << metrics_avg_turn_deg
+                       << " deg, smoothness=" << metrics_smoothness_pct << " %";
                     pub_message(message_pub, prometheus_msgs::Message::NORMAL, NODE_NAME, ss.str());
 
                     // 停止执行并回到等待目标
@@ -544,8 +611,10 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
                 }
             }
 
-            // 本循环是1Hz,此处不是很精准
-            if(exec_num >= replan_time)
+            // 终点附近禁止重规划，避免反复发送最终目标点导致统计时间偏大
+            Eigen::Vector3d cur_pos(_DroneState.position[0], _DroneState.position[1], _DroneState.position[2]);
+            const double d_to_goal = (cur_pos - goal_pos).norm();
+            if(exec_num >= replan_time && d_to_goal > no_replan_dist)
             {
                 exec_state = EXEC_STATE::PLANNING;
                 exec_num = 0;
@@ -568,6 +637,56 @@ void Global_Planner::mainloop_cb(const ros::TimerEvent& e)
 
 }
 
+
+void Global_Planner::compute_turn_metrics(double& avg_turn_deg, double& smoothness_pct) const
+{
+    avg_turn_deg = 0.0;
+    smoothness_pct = 100.0;
+
+    if (metrics_traj_points.size() < 3)
+    {
+        return;
+    }
+
+    int turn_count = 0;
+    int sharp_turn_count = 0;
+    double turn_sum_deg = 0.0;
+
+    for (size_t i = 1; i + 1 < metrics_traj_points.size(); ++i)
+    {
+        const Eigen::Vector3d v1 = metrics_traj_points[i] - metrics_traj_points[i - 1];
+        const Eigen::Vector3d v2 = metrics_traj_points[i + 1] - metrics_traj_points[i];
+        const double n1 = v1.norm();
+        const double n2 = v2.norm();
+
+        if (n1 < metrics_min_step || n2 < metrics_min_step)
+        {
+            continue;
+        }
+
+        double cos_theta = v1.dot(v2) / (n1 * n2);
+        cos_theta = std::max(-1.0, std::min(1.0, cos_theta));
+        const double angle_deg = std::acos(cos_theta) * 180.0 / M_PI;
+
+        if (angle_deg >= small_turn_thresh_deg)
+        {
+            ++turn_count;
+            turn_sum_deg += angle_deg;
+
+            if (angle_deg >= large_turn_thresh_deg)
+            {
+                ++sharp_turn_count;
+            }
+        }
+    }
+
+    if (turn_count > 0)
+    {
+        avg_turn_deg = turn_sum_deg / static_cast<double>(turn_count);
+        smoothness_pct = 100.0 - 100.0 * static_cast<double>(sharp_turn_count) / static_cast<double>(turn_count);
+    }
+}
+
 // 【获取当前时间函数】 单位：秒
 float Global_Planner::get_time_in_sec(const ros::Time& begin_time)
 {
@@ -581,7 +700,10 @@ void Global_Planner::safety_cb(const ros::TimerEvent& e)
 {
     Eigen::Vector3d cur_pos(_DroneState.position[0], _DroneState.position[1], _DroneState.position[2]);
     
-    is_safety = (algorithm_mode==0?Astar_ptr->check_safety(cur_pos, safe_distance):RRT_ptr->check_safety(cur_pos, safe_distance));
+    if(algorithm_mode==0) is_safety = Astar_ptr->check_safety(cur_pos, safe_distance);
+    else if(algorithm_mode==1) is_safety = RRT_ptr->check_safety(cur_pos, safe_distance);
+    else if(algorithm_mode==2) is_safety = Dijkstra_ptr->check_safety(cur_pos, safe_distance);
+    else is_safety = RRTstar_ptr->check_safety(cur_pos, safe_distance);
 }
 
 int Global_Planner::get_start_point_id(void)

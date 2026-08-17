@@ -82,7 +82,7 @@ private:
     ros::Publisher command_pub,path_cmd_pub;
     // 发布飞行统计：
     // data[0]=飞行时间(s), data[1]=实际飞行距离(m),
-    // data[2]=平均转角(deg), data[3]=smoothness(%)
+    // data[2]=平均转角(deg), data[3]=急转弯占比(%)
     ros::Publisher metrics_pub;
     ros::Timer mainloop_timer, track_path_timer, safety_timer;
 
@@ -121,23 +121,24 @@ private:
     ros::Time tra_start_time;
     float tra_running_time;
 
-    // 飞行统计（均基于 drone_state 实际飞行轨迹）
+    // 飞行统计（实际飞行距离 & 到达时间）
     bool metrics_running{false};
     bool metrics_last_pos_valid{false};
     bool final_goal_cmd_sent{false};
     ros::Time metrics_start_time;
     Eigen::Vector3d metrics_last_pos;
-    std::vector<Eigen::Vector3d> metrics_traj_points;
     double metrics_distance_m{0.0};
+    double arrive_dist{0.3};        // [m] 抵达判定距离阈值
+    double arrive_vel{0.2};         // [m/s] 抵达判定速度阈值
+    double metrics_min_step{0.01};  // [m] 去除抖动噪声
+
+    // 转角统计（基于任务期间实际下发的航点序列）
+    std::vector<Eigen::Vector3d> metrics_waypoints;
     double metrics_avg_turn_deg{0.0};
-    double metrics_smoothness_pct{100.0};
-    double arrive_dist{0.3};           // [m] 抵达判定距离阈值
-    double arrive_vel{0.2};            // [m/s] 抵达判定速度阈值
-    double metrics_min_step{0.01};     // [m] 去除抖动噪声
-    double no_replan_dist{1.0};        // [m] 距终点小于该值时禁止重规划
-    double small_turn_thresh_deg{5.0}; // [deg] 小转角阈值
-    double large_turn_thresh_deg{15.0};// [deg] 大转角阈值
-    
+    double metrics_smoothness_pct{0.0};
+    double small_turn_thresh_deg{5.0};   // [deg] 小转角阈值
+    double large_turn_thresh_deg{15.0};  // [deg] 大转角阈值（急转弯阈值）
+
     // 打印的提示消息
     string message;
 
@@ -162,6 +163,8 @@ private:
     void mainloop_cb(const ros::TimerEvent& e);
     void track_path_cb(const ros::TimerEvent& e);
 
+    // 统计辅助函数
+    void append_metrics_waypoint(const Eigen::Vector3d& pt);
     void compute_turn_metrics(double& avg_turn_deg, double& smoothness_pct) const;
 
     // 【获取当前时间函数】 单位：秒

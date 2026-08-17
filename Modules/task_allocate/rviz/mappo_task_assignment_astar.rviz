@@ -1,0 +1,104 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Name: Grid
+      Plane: XY
+      Plane Cell Count: 80
+      Reference Frame: world
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /swarm_task_assignment_mappo/assignment_markers
+      Name: Assignment_Markers
+      Queue Size: 100
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /swarm_task_assignment_mappo/uav_model_markers
+      Name: UAV_Model_Markers
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Path
+      Enabled: true
+      Name: UAV1_AStar_Path
+      Topic: /swarm_task_assignment_mappo/uav1_astar_path
+      Queue Size: 10
+      Line Style: Lines
+      Line Width: 0.12
+      Color: 25; 204; 25
+      Value: true
+    - Class: rviz/Path
+      Enabled: true
+      Name: UAV2_AStar_Path
+      Topic: /swarm_task_assignment_mappo/uav2_astar_path
+      Queue Size: 10
+      Line Style: Lines
+      Line Width: 0.12
+      Color: 255; 153; 0
+      Value: true
+    - Class: rviz/Path
+      Enabled: true
+      Name: UAV3_AStar_Path
+      Topic: /swarm_task_assignment_mappo/uav3_astar_path
+      Queue Size: 10
+      Line Style: Lines
+      Line Width: 0.12
+      Color: 51; 204; 255
+      Value: true
+    - Class: rviz/Path
+      Enabled: true
+      Name: UAV4_AStar_Path
+      Topic: /swarm_task_assignment_mappo/uav4_astar_path
+      Queue Size: 10
+      Line Style: Lines
+      Line Width: 0.12
+      Color: 255; 51; 204
+      Value: true
+    - Class: rviz/Path
+      Enabled: true
+      Name: UAV5_AStar_Path
+      Topic: /swarm_task_assignment_mappo/uav5_astar_path
+      Queue Size: 10
+      Line Style: Lines
+      Line Width: 0.12
+      Color: 204; 255; 51
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 30
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+  Value: true
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 75
+      Focal Point:
+        X: 28
+        Y: 0
+        Z: 0
+      Name: Current View
+      Pitch: 0.85
+      Target Frame: world
+      Yaw: 5.45
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1400
+  X: 80
+  Y: 60

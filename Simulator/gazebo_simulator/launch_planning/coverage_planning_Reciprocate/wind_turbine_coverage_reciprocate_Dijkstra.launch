@@ -1,0 +1,151 @@
+<launch>
+    <!-- ==================== Gazebo 仿真 ==================== -->
+    <arg name="x" default="5.0"/>
+    <arg name="y" default="0.0"/>
+    <arg name="z" default="0.0"/>
+
+    <arg name="world" default="$(find prometheus_gazebo)/worlds/wind_turbine_gazebo.world"/>
+    <arg name="sdf"   default="$(find prometheus_gazebo)/amov_models/p450_3Dlidar/p450_3Dlidar.sdf"/>
+    <arg name="model" default="p450_3Dlidar"/>
+
+    <include file="$(find prometheus_gazebo)/launch_basic/sitl.launch">
+        <arg name="world" value="$(arg world)"/>
+        <arg name="sdf"   value="$(arg sdf)"/>
+        <arg name="model" value="$(arg model)"/>
+        <arg name="x"     value="$(arg x)"/>
+        <arg name="y"     value="$(arg y)"/>
+        <arg name="z"     value="$(arg z)"/>
+    </include>
+
+    <!-- ==================== 风机真实模型点云发布 ==================== -->
+    <node pkg="wind_turbine_coverage_planning" type="wind_turbine_model_pcl_pub" name="wind_turbine_model_pcl_pub" output="screen">
+        <param name="frame_id" value="world"/>
+        <param name="publish_rate" value="1.0" type="double"/>
+
+        <param name="support_mesh" value="/home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine_gazebo/meshes/Support.stl"/>
+        <param name="center_mesh"  value="/home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine_gazebo/meshes/Center.stl"/>
+        <param name="blade1_mesh"  value="/home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine_gazebo/meshes/Blade1.stl"/>
+        <param name="blade2_mesh"  value="/home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine_gazebo/meshes/Blade2.stl"/>
+        <param name="blade3_mesh"  value="/home/amov/Prometheus/Simulator/gazebo_simulator/models/wind_turbine_gazebo/meshes/Blade3.stl"/>
+
+        <param name="sample_density" value="1800.0" type="double"/>
+        <param name="min_points_per_mesh" value="800" type="int"/>
+        <param name="leaf_size" value="0.05" type="double"/>
+
+        <param name="model_tx" value="0.0" type="double"/>
+        <param name="model_ty" value="0.0" type="double"/>
+        <param name="model_tz" value="0.0" type="double"/>
+        <param name="model_roll"  value="0.0" type="double"/>
+        <param name="model_pitch" value="0.0" type="double"/>
+        <param name="model_yaw"   value="0.0" type="double"/>
+    </node>
+
+    <!-- ==================== 全局规划器：Dijkstra ==================== -->
+    <node pkg="prometheus_global_planning" name="global_planner_main" type="global_planner_main" output="screen" launch-prefix="gnome-terminal --">
+        <param name="global_planner/is_2D" value="false" type="bool"/>
+        <param name="global_planner/fly_height_2D" value="1.0" type="double"/>
+        <param name="global_planner/safe_distance" value="0.01" type="double"/>
+        <param name="global_planner/time_per_path" value="1.0" type="double"/>
+        <param name="global_planner/replan_time" value="0.2" type="double"/>
+        <param name="global_planner/map_input" value="0" type="int"/>
+        <param name="global_planner/sim_mode" value="true" type="bool"/>
+        <param name="global_planner/algorithm_mode" value="2" type="int"/>
+
+        <param name="global_planner/arrive_dist" value="0.30" type="double"/>
+        <param name="global_planner/arrive_vel" value="0.20" type="double"/>
+        <param name="global_planner/metrics_min_step" value="0.01" type="double"/>
+        <param name="global_planner/no_replan_dist" value="1.0" type="double"/>
+        <param name="global_planner/small_turn_thresh_deg" value="5.0" type="double"/>
+        <param name="global_planner/large_turn_thresh_deg" value="15.0" type="double"/>
+        
+        <!-- Dijkstra参数 -->
+        <param name="dijkstra/allocate_num" value="1000000" type="int"/>
+
+        <param name="map/resolution" value="0.15" type="double"/>
+        <param name="map/inflate" value="0.35" type="double"/>
+        <param name="map/origin_x" value="-15.0" type="double"/>
+        <param name="map/origin_y" value="-15.0" type="double"/>
+        <param name="map/origin_z" value="-0.5" type="double"/>
+        <param name="map/map_size_x" value="30.0" type="double"/>
+        <param name="map/map_size_y" value="30.0" type="double"/>
+        <param name="map/map_size_z" value="25.0" type="double"/>
+    </node>
+
+    <!-- ==================== 风机覆盖规划器：塔筒螺旋 + 叶片往复式 ==================== -->
+    <node pkg="wind_turbine_coverage_planning" type="wind_turbine_coverage_plannner_reciprocate" name="wind_turbine_coverage_plannner_reciprocate" output="screen" launch-prefix="gnome-terminal --">
+
+        <param name="coverage/frame_id" value="world"/>
+        <param name="coverage/goal_topic" value="/prometheus/planning/goal"/>
+        <param name="coverage/drone_state_topic" value="/prometheus/drone_state"/>
+
+        <param name="coverage/base_x" value="0.0" type="double"/>
+        <param name="coverage/base_y" value="0.0" type="double"/>
+        <param name="coverage/base_z" value="0.0" type="double"/>
+
+        <param name="coverage/tower_radius" value="0.60" type="double"/>
+        <param name="coverage/tower_height" value="13.6" type="double"/>
+
+        <param name="coverage/hub_x" value="0.0" type="double"/>
+        <param name="coverage/hub_y" value="-1.1365" type="double"/>
+        <param name="coverage/hub_z" value="13.168" type="double"/>
+
+        <!-- 塔筒螺旋 -->
+        <param name="coverage/tower_offset_distance" value="1.5" type="double"/>
+        <param name="coverage/tower_spiral_pitch" value="4.0" type="double"/>
+        <param name="coverage/tower_wp_arc_step" value="1.0" type="double"/>
+        <param name="coverage/tower_z_start" value="1.5" type="double"/>
+        <param name="coverage/tower_z_end" value="11.5" type="double"/>
+
+        <!-- 叶片往复式（正面/反面） -->
+        <param name="coverage/blade_root_margin" value="0.45" type="double"/>
+        <param name="coverage/blade_tip_margin" value="0.35" type="double"/>
+        <param name="coverage/blade_surface_offset" value="1.5" type="double"/>
+        <param name="coverage/rotor_face_nx" value="0.0" type="double"/>
+        <param name="coverage/rotor_face_ny" value="1.0" type="double"/>
+        <param name="coverage/rotor_face_nz" value="0.0" type="double"/>
+        <param name="coverage/blade_axis_step" value="2.0" type="double"/>
+        <param name="coverage/blade_transfer_side_offset" value="1.0" type="double"/>
+        <param name="coverage/blade_transfer_axis_margin" value="0.4" type="double"/>
+        <param name="coverage/blade_tip_turn_offset" value="1.0" type="double"/>
+
+        <param name="coverage/blade1_root_x" value="0.3943" type="double"/>
+        <param name="coverage/blade1_root_y" value="-0.9067" type="double"/>
+        <param name="coverage/blade1_root_z" value="13.1903" type="double"/>
+        <param name="coverage/blade1_tip_x"  value="5.8692" type="double"/>
+        <param name="coverage/blade1_tip_y"  value="-1.0068" type="double"/>
+        <param name="coverage/blade1_tip_z"  value="9.8347" type="double"/>
+
+        <param name="coverage/blade2_root_x" value="-0.1730" type="double"/>
+        <param name="coverage/blade2_root_y" value="-0.9067" type="double"/>
+        <param name="coverage/blade2_root_z" value="12.8054" type="double"/>
+        <param name="coverage/blade2_tip_x"  value="-5.8158" type="double"/>
+        <param name="coverage/blade2_tip_y"  value="-1.0068" type="double"/>
+        <param name="coverage/blade2_tip_z"  value="9.7422" type="double"/>
+
+        <param name="coverage/blade3_root_x" value="-0.2218" type="double"/>
+        <param name="coverage/blade3_root_y" value="-0.9068" type="double"/>
+        <param name="coverage/blade3_root_z" value="13.4852" type="double"/>
+        <param name="coverage/blade3_tip_x"  value="-0.0534" type="double"/>
+        <param name="coverage/blade3_tip_y"  value="-1.0068" type="double"/>
+        <param name="coverage/blade3_tip_z"  value="19.9080" type="double"/>
+
+        <param name="coverage/approach_radius" value="5.0" type="double"/>
+        <param name="coverage/approach_height" value="1.0" type="double"/>
+        <param name="coverage/final_hover_radius" value="5.0" type="double"/>
+        <param name="coverage/final_hover_height" value="1.0" type="double"/>
+
+        <param name="coverage/reach_dist" value="0.45" type="double"/>
+        <param name="coverage/publish_interval" value="1.0" type="double"/>
+        <param name="coverage/auto_start_delay" value="2.0" type="double"/>
+
+        <param name="coverage/metrics_min_step" value="0.02" type="double"/>
+        <param name="coverage/small_turn_thresh_deg" value="5.0" type="double"/>
+        <param name="coverage/large_turn_thresh_deg" value="15.0" type="double"/>
+    </node>
+
+    <!-- ==================== RViz ==================== -->
+    <arg name="visualization" default="true"/>
+    <group if="$(arg visualization)">
+        <node type="rviz" name="rviz" pkg="rviz" args="-d $(find prometheus_gazebo)/config/rviz_config/rviz_config_astar.rviz" />
+    </group>
+</launch>

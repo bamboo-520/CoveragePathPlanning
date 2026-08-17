@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_eigen
   mavros_msgs
   prometheus_msgs
+  quadrotor_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -41,11 +42,27 @@ generate_messages(
   std_msgs
 )
 
+# catkin_package(
+#   INCLUDE_DIRS include
+#   CATKIN_DEPENDS  message_runtime
+# )
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS  message_runtime
+  CATKIN_DEPENDS
+    message_runtime
+    roscpp
+    geometry_msgs
+    nav_msgs
+    sensor_msgs
+    std_msgs
+    std_srvs
+    tf
+    tf2_ros
+    tf2_eigen
+    mavros_msgs
+    prometheus_msgs
+    quadrotor_msgs
 )
-
 
 ###########
 ## Build ##
